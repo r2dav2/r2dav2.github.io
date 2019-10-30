@@ -6,6 +6,7 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 var loader = new THREE.GLTFLoader();
+var raycaster = new THREE.Raycaster();
 
 var player = {
 	height: 325,
@@ -20,6 +21,7 @@ var player = {
 	upVelocity: 0,
 	canMove: true,
 	mouseSens: 0.002,
+	inCar: false,
 	moveForward: function(dist) {
 		var vec = new THREE.Vector3();
 		vec.setFromMatrixColumn(camera.matrix, 0);
@@ -35,14 +37,12 @@ var player = {
 
 var scene = new THREE.Scene();
 scene.background = new THREE.Color('white');
-var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100000);
-var renderer;
 
-/*var geometry = new THREE.BoxGeometry(1, 1, 1);
-var material = new THREE.MeshStandardMaterial({color: 'red'});
-cube = new THREE.Mesh(geometry, material);
-cube.castShadow = true;
-scene.add(cube);*/
+var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100000);
+
+var renderer = new THREE.WebGLRenderer();
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 var sunlight = new THREE.DirectionalLight('white', 0.75);
 sunlight.position.set(10000, 10000, 10000);
@@ -64,7 +64,6 @@ for (var i = 0; i < floorGeometry.faces.length; i += 2) {
 	floorGeometry.faces[i + 1].materialIndex = index;
 }
 
-//var floorMaterial = new THREE.MeshStandardMaterial({color: 'red'});
 var floorMaterial = new THREE.MeshFaceMaterial(floorMaterials);
 var floor = new THREE.Mesh(floorGeometry, floorMaterial);
 floor.material.side = THREE.DoubleSide;
@@ -73,12 +72,66 @@ floor.position.y = 0;
 floor.receiveShadow = true;
 scene.add(floor);
 
-var car = undefined;
+var models = {};
+
+function CarObject(pos = {x: 0, y: 0, z: 0}, rot = {x: 0, y: 0, z: 0}) {
+	this.accel = 10;
+	this.decel = 0.999;
+	this.rotationAccel = Math.PI / 8;
+	this.rotationDecel = 0.7;
+
+	this.car = models.car.clone();
+
+	scene.add(this.car);
+	this.inScene = true;
+
+	this.car.position.x = pos.x;
+	this.car.position.y = pos.y;
+	this.car.position.z = pos.z;
+
+	this.car.rotation.x = rot.x;
+	this.car.rotation.y = rot.y;
+	this.car.rotation.z = rot.z;
+
+	this.rotationVelocity = 0;
+	this.forwardVelocity = 0;
+
+	this.playerInCar = false;
+
+	return this;
+}
+
+CarObject.prototype.moveForward = function(dist) {
+	if (Math.abs(dist) > 0) {
+		var vec = new THREE.Vector3();
+		vec.setFromMatrixColumn(this.car.matrix, 0);
+		vec.crossVectors(this.car.up, vec);
+		this.car.position.addScaledVector(vec, -dist);
+	}
+}
+
+CarObject.prototype.move = function(dt = 0) {
+	this.moveForward(dt * this.forwardVelocity);
+
+	var speedMultiplier = Math.min(this.forwardVelocity / 2000, 1);
+	var rotate = dt * this.rotationVelocity * speedMultiplier;
+	this.car.rotation.y += rotate;
+	if (this.playerInCar) {
+		euler.y += rotate;
+		camera.quaternion.setFromEuler(euler);
+	}
+
+	this.forwardVelocity *= this.decel;
+	this.rotationVelocity *= this.rotationDecel;
+}
+
+var cars = [];
 loader.load('models/pony_cartoon/scene.gltf', gltf => {
 	car = gltf.scene;
-	scene.add(car);
+	models.car = car;
 
-	car.position.y = 1;
+	cars.push(new CarObject({x: 0, y: 1, z: 0}, {x: 0, y: 0, z: 0}));
+	cars.push(new CarObject({x: 1000, y: 1, z: 0}, {x: 0, y: 0, z: 0}));
 }, undefined, error => {
 	console.error(error);
 });
@@ -88,9 +141,6 @@ camera.position.y = player.minY;
 camera.position.z = 1000;
 
 $(document).ready(() => {
-	renderer = new THREE.WebGLRenderer();
-	renderer.shadowMap.enabled = true;
-	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 	renderer.setSize(window.innerWidth, window.innerHeight);
 	document.body.appendChild(renderer.domElement);
 
@@ -105,23 +155,15 @@ $(document).ready(() => {
 	animate();
 });
 
-var mouse = {x: 0, y: 0};
 var euler = new THREE.Euler(0, 0, 0, 'YXZ');
 
 $(document).mousemove(e => {
 	if (!pointerLocked) return ;
 
-	var min = (Math.PI / 2) / player.mouseSens;
+	euler.y += -e.originalEvent.movementX * player.mouseSens;
+	euler.x += -e.originalEvent.movementY * player.mouseSens;
 
-	mouse.x += e.originalEvent.movementX;
-	mouse.y += e.originalEvent.movementY;
-
-	mouse.y = Math.max(-min, Math.min(min, mouse.y));
-
-	euler.y = -mouse.x * player.mouseSens;
-	euler.x = -mouse.y * player.mouseSens;
-
-	//euler.x = Math.max(- Math.PI / 2, Math.min(Math.PI / 2, euler.x));
+	euler.x = Math.max(- Math.PI / 2, Math.min(Math.PI / 2, euler.x));
 
 	camera.quaternion.setFromEuler(euler);
 });
@@ -141,26 +183,91 @@ $(document).keyup(e => {
 	keysDown[e.keyCode] = false;
 });
 
+$(document).keypress(e => {
+	if (player.inCar && e.keyCode == 101) {
+		player.inCar = false;
+		player.carPossession.playerInCar = false;
+	} else {
+		if (e.keyCode == 101) {
+			var carIds = [];
+			cars.forEach(carObj => {
+				carIds.push(carObj.car.id);
+			});
+
+			var vec = new THREE.Vector2(0, 0);
+			raycaster.setFromCamera(vec, camera);
+			var intersects = raycaster.intersectObjects(scene.children, true);
+			var n = undefined;
+			for (var i in intersects) {
+				var result = intersects[i];
+				for (var j in carIds) {
+					var id = carIds[j];
+					var diff = result.object.id - id;
+					if (diff <= 7 && diff > 0 && result.distance < 250) { //hacky as shit, but I'm clueless so
+						n = j;
+						break;
+					}
+				};
+				if (n != undefined) {
+					player.inCar = true;
+					player.carPossession = cars[n];
+					cars[n].playerInCar = true;
+					console.log('car ' + n + ' selected');
+					break;
+				}
+			};
+		}
+	}
+});
+
 function playerControls(dt) {
-	var touchingGround = camera.position.y == player.minY;
-	var accel = touchingGround ? player.accel : player.offGroundAccel;
-	var decel = touchingGround ? player.decel : player.offGroundDecel;
+	if (player.inCar) {
+		player.forwardVelocity = player.rightVelocity = player.upVelocity = 0;
 
-	if (keysDown[87]) player.forwardVelocity += accel;
-	if (keysDown[83]) player.forwardVelocity -= accel;
-	if (keysDown[68]) player.rightVelocity += accel;
-	if (keysDown[65]) player.rightVelocity -= accel;
+		var carController = player.carPossession;
 
-	if (keysDown[32] && touchingGround) player.upVelocity = player.jumpHeight; 
+		camera.position.x = player.carPossession.car.position.x;
+		camera.position.y = player.carPossession.car.position.y + 300;
+		camera.position.z = player.carPossession.car.position.z;
 
-	player.moveForward(dt * player.forwardVelocity);
-	player.moveRight(dt * player.rightVelocity);
-	camera.position.y = Math.max(player.minY, camera.position.y + dt * player.upVelocity);
-	if (touchingGround && player.upVelocity < 0) player.upVelocity = 0;
+		if (keysDown[87]) {
+			var accelMultiplier = carController.forwardVelocity < 0 ? 2 : 1;
+			carController.forwardVelocity += carController.accel * accelMultiplier;
+		}
+		if (keysDown[83]) {
+			var accelMultiplier = carController.forwardVelocity > 0 ? 2 : 1;
+			carController.forwardVelocity -= carController.accel * accelMultiplier;
+		}
+		if (keysDown[68]) carController.rotationVelocity -= carController.rotationAccel;
+		if (keysDown[65]) carController.rotationVelocity += carController.rotationAccel;
 
-	player.forwardVelocity *= decel;
-	player.rightVelocity *= decel;
-	player.upVelocity -= dt * player.gravity;
+
+	} else {
+		var touchingGround = camera.position.y == player.minY;
+		var accel = touchingGround ? player.accel : player.offGroundAccel;
+		var decel = touchingGround ? player.decel : player.offGroundDecel;
+
+		if (keysDown[87]) player.forwardVelocity += accel;
+		if (keysDown[83]) player.forwardVelocity -= accel;
+		if (keysDown[68]) player.rightVelocity += accel;
+		if (keysDown[65]) player.rightVelocity -= accel;
+
+		if (keysDown[32] && touchingGround) player.upVelocity = player.jumpHeight; 
+
+		player.moveForward(dt * player.forwardVelocity);
+		player.moveRight(dt * player.rightVelocity);
+		camera.position.y = Math.max(player.minY, camera.position.y + dt * player.upVelocity);
+		if (touchingGround && player.upVelocity < 0) player.upVelocity = 0;
+
+		player.forwardVelocity *= decel;
+		player.rightVelocity *= decel;
+		player.upVelocity -= dt * player.gravity;
+	}
+	
+}
+
+function moveCars(dt) {
+	cars.forEach(car => car.move(dt));
 }
 
 function animate() {
@@ -170,19 +277,8 @@ function animate() {
 
 	requestAnimationFrame(animate);
 
-	//cube.rotation.x += (Math.PI / 2) * dt;
-	//cube.rotation.y += (Math.PI / 2) * dt;
-
+	moveCars(dt);
 	playerControls(dt);
-
-	if (car != undefined) {
-		var theta = (time.getTime() / 1000);
-
-		car.position.x = Math.cos(theta) * 1000;
-		car.position.z = Math.sin(theta) * 1000;
-
-		car.rotation.y = -theta; 
-	}
 
 	renderer.render(scene, camera);
 }
