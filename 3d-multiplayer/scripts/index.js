@@ -37,8 +37,9 @@ var player = {
 
 var scene = new THREE.Scene();
 scene.background = new THREE.Color('white');
+scene.fog = new THREE.Fog('white', 7500, 25000);
 
-var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100000);
+var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 25000);
 
 var renderer = new THREE.WebGLRenderer();
 renderer.shadowMap.enabled = true;
@@ -52,25 +53,6 @@ scene.add(sunlight);
 
 var hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.8);
 scene.add(hemiLight);
-
-var floorGeometry = new THREE.PlaneGeometry(10000, 10000, 64, 64);
-var floorMaterials = [];
-floorMaterials.push(new THREE.MeshStandardMaterial({color: 'white', side: THREE.DoubleSide}));
-floorMaterials.push(new THREE.MeshStandardMaterial({color: 'black', side: THREE.DoubleSide}));
-
-for (var i = 0; i < floorGeometry.faces.length; i += 2) {
-	var index = (i / 2 + Math.floor(i / 128)) % 2;
-	floorGeometry.faces[i].materialIndex = index;
-	floorGeometry.faces[i + 1].materialIndex = index;
-}
-
-var floorMaterial = new THREE.MeshFaceMaterial(floorMaterials);
-var floor = new THREE.Mesh(floorGeometry, floorMaterial);
-floor.material.side = THREE.DoubleSide;
-floor.rotation.x = Math.PI / 2;
-floor.position.y = 0;
-floor.receiveShadow = true;
-scene.add(floor);
 
 var models = {};
 
@@ -125,6 +107,17 @@ CarObject.prototype.move = function(dt = 0) {
 	this.rotationVelocity *= this.rotationDecel;
 }
 
+function PlayerCharacter() {
+	this.object = models.shittyHuman.clone(); 
+	scene.add(this.object);
+
+	this.object.scale.x = this.object.scale.y = this.object.scale.z = 4.5;
+	this.object.rotation.x = -Math.PI / 2;
+	this.object.position.y = 20;
+
+	return this;
+}
+
 var cars = [];
 loader.load('models/pony_cartoon/scene.gltf', gltf => {
 	car = gltf.scene;
@@ -136,9 +129,20 @@ loader.load('models/pony_cartoon/scene.gltf', gltf => {
 	console.error(error);
 });
 
-player.minY = floor.position.y + player.height;
+var groundLevel = 0;
+player.minY = groundLevel + player.height;
 camera.position.y = player.minY;
 camera.position.z = 1000;
+
+loader.load('models/city_building_set_1/scene.gltf', gltf => {
+	models.city = gltf.scene;
+	scene.add(gltf.scene);
+});
+
+var playerCharacters = {};
+loader.load('models/shitty_human/scene.gltf', gltf => {
+	models.shittyHuman = gltf.scene;
+});
 
 $(document).ready(() => {
 	renderer.setSize(window.innerWidth, window.innerHeight);
@@ -270,6 +274,33 @@ function moveCars(dt) {
 	cars.forEach(car => car.move(dt));
 }
 
+socket.on('update-players', players => {
+	if (models.shittyHuman) {
+		for (var player in players) {
+			player = players[player];
+			if (player.id != socket.id) {
+				if (!playerCharacters[player.id]) playerCharacters[player.id] = new PlayerCharacter();
+				var playerChar = playerCharacters[player.id];
+				if (player.position) {
+					playerChar.object.position.x = player.position.x;
+					playerChar.object.position.y = player.position.y;
+					playerChar.object.position.z = player.position.z;
+				}
+				if (player.rotation) {
+					playerChar.object.rotation.x = player.rotation.x;
+					playerChar.object.rotation.y = player.rotation.y;
+					playerChar.object.rotation.z = player.rotation.z;
+				}			
+			}
+		}
+	} else console.log('loading models');
+});
+
+socket.on('remove-player', id => {
+	scene.remove(playerCharacters[id].object);
+	delete playerCharacters[id];
+});
+
 function animate() {
 	var time = new Date();
 	var dt = (time - lastLoop) / 1000;
@@ -281,5 +312,18 @@ function animate() {
 	playerControls(dt);
 
 	renderer.render(scene, camera);
+
+	socket.emit('update-player', {
+		position: {
+			x: camera.position.x,
+			y: camera.position.y - player.height,
+			z: camera.position.z
+		},
+		rotation: {
+			x: -Math.PI / 2,
+			y: 0,
+			z: euler.y + Math.PI
+		}
+	});
 }
 var lastLoop = new Date();
