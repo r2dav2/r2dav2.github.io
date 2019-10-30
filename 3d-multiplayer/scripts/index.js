@@ -57,10 +57,10 @@ scene.add(hemiLight);
 var models = {};
 
 function CarObject(pos = {x: 0, y: 0, z: 0}, rot = {x: 0, y: 0, z: 0}) {
-	this.accel = 10;
-	this.decel = 0.999;
-	this.rotationAccel = Math.PI / 8;
-	this.rotationDecel = 0.7;
+	this.accel = 20;
+	this.decel = 0.998;
+	this.rotationAccel = Math.PI / 16;
+	this.rotationDecel = 0.9;
 
 	this.car = models.car.clone();
 
@@ -95,7 +95,7 @@ CarObject.prototype.moveForward = function(dist) {
 CarObject.prototype.move = function(dt = 0) {
 	this.moveForward(dt * this.forwardVelocity);
 
-	var speedMultiplier = Math.min(this.forwardVelocity / 2000, 1);
+	var speedMultiplier = Math.min(Math.abs(this.forwardVelocity) / 2000, 1);
 	var rotate = dt * this.rotationVelocity * speedMultiplier;
 	this.car.rotation.y += rotate;
 	if (this.playerInCar) {
