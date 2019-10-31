@@ -264,13 +264,25 @@ function animate() {
 				forwardVelocity: carController.forwardVelocity,
 				rotationVelocity: carController.rotationVelocity
 			});
-			
+
 			if (Math.abs(carController.forwardVelocity) <= 5 && Math.abs(carController.rotationVelocity) <= 5) {
-				deleted++;
-				hostedCars.splice(i - deleted, 1);
-				socket.emit('unhost-car', carNumber);
+				unhostCar(carNumber);
 			}
 		});
 	}
 }
+
+socket.on('unhost-car', carNumber => {
+	unhostCar(carNumber);
+});
+
+function unhostCar(n) {
+	n = parseInt(n);
+	var i = hostedCars.indexOf(n);
+	if (i != -1) {
+		hostedCars.splice(i, 1);
+		socket.emit('unhost-car', n);
+	}
+}
+
 var lastLoop = new Date();

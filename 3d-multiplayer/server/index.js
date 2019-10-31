@@ -65,12 +65,17 @@ io.sockets.on('connection', socket => {
 	});
 
 	socket.on('controlling-car', n => {
+		if (cars[n].hostedBy != null) {
+			var socketid = cars[n].hostedBy;
+			io.to(socketid).emit('unhost-car', n);
+		}
 		cars[n].controlledBy = socket.id;
 		players[socket.id].carPossession = n;
 	});
 
 	socket.on('uncontrolling-car', n => {
 		cars[n].controlledBy = undefined;
+		cars[n].hostedBy = undefined;
 		players[socket.id].carPossession = undefined;
 	});
 
@@ -91,6 +96,7 @@ io.sockets.on('connection', socket => {
 
 	socket.on('unhost-car', carNumber => {
 		if (cars[carNumber].hostedBy != undefined) cars[carNumber].hostedBy = undefined;
+		
 		var i = players[socket.id].hostedCars.indexOf(carNumber);
 		if (i != -1) players[socket.id].hostedCars.splice(i, 1);
 	});
@@ -116,8 +122,6 @@ setInterval(() => {
 					});
 					car.hostedBy = socketid;
 					players[socketid].hostedCars.push(i);
-					console.log(players[socketid].hostedCars.length);
-					console.log('assigned car ' + i + ' to socket ' + socketid);
 				}
 			}
 		}
