@@ -1,4 +1,5 @@
-var socket = io.connect('https://4f088c20.ngrok.io');
+//var socket = io.connect('https://4f088c20.ngrok.io');
+var socket = io.connect('http://100.14.116.82:25565');
 
 var pointerLocked = false;
 document.addEventListener('pointerlockchange', () => {

@@ -128,4 +128,4 @@ setInterval(() => {
 	});
 }, 0);
 
-server.listen(8080);
+server.listen(25565);
