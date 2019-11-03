@@ -1,5 +1,5 @@
 //var socket = io.connect('https://4f088c20.ngrok.io');
-var socket = io.connect('https://100.14.69.172:25565', {secure: true});
+var socket = io.connect('https://100.14.69.172:25565', {secure: true, rejectUnauthorized: false});
 
 var pointerLocked = false;
 document.addEventListener('pointerlockchange', () => {
