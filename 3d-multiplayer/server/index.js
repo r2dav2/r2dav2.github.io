@@ -1,4 +1,12 @@
-var server = require('http').createServer();
+const fs = require('fs');
+
+const options = {
+	key: fs.readFileSync('client-key.pem'),
+	cert: fs.readFileSync('client-cert.pem')
+};
+
+var server = require('https').createServer(options);
+
 var io = require('socket.io')(server);
 
 var players = {};
@@ -13,10 +21,10 @@ var cars = [
 			x: 0,
 			y: Math.PI,
 			z: 0
-		}
-		,
+		},
 		forwardVelocity: 0,
-		rotationVelocity: 0
+		rotationVelocity: 0,
+		controlledBy: undefined
 	},
 	{
 		position: {
@@ -30,7 +38,8 @@ var cars = [
 			z: 0
 		},
 		forwardVelocity: 0,
-		rotationVelocity: 0
+		rotationVelocity: 0,
+		controlledBy: undefined
 	}
 ];
 
@@ -71,12 +80,19 @@ io.sockets.on('connection', socket => {
 		}
 		cars[n].controlledBy = socket.id;
 		players[socket.id].carPossession = n;
+
+		io.emit('car-controlled-by', {
+			user: socket.id,
+			carNumber: n
+		});
 	});
 
 	socket.on('uncontrolling-car', n => {
 		cars[n].controlledBy = undefined;
 		cars[n].hostedBy = undefined;
 		players[socket.id].carPossession = undefined;
+
+		io.emit('car-uncontrolled', n);
 	});
 
 	socket.on('disconnect', () => {

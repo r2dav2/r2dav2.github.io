@@ -1,5 +1,5 @@
 //var socket = io.connect('https://4f088c20.ngrok.io');
-var socket = io.connect('http://100.14.116.82:25565');
+var socket = io.connect('https://100.14.69.172:25565', {secure: true});
 
 var pointerLocked = false;
 document.addEventListener('pointerlockchange', () => {
@@ -60,6 +60,8 @@ socket.on('spawn-cars', cars => {
 				y: car.rotation.y,
 				z: car.rotation.z
 			});
+
+			carController.controlledBy = car.controlledBy;
 
 			window.cars.push(carController);
 		});
@@ -156,13 +158,16 @@ $(document).keypress(e => {
 					}
 				};
 				if (n != undefined) {
-					player.inCar = true;
-					player.carPossession = cars[n];
-					player.carNumber = n;
-					player.setView(cars[n].car.rotation.y + Math.PI, player.view.x);					
-					cars[n].playerInCar = true;
+					if (cars[n].controlledBy == undefined) {
+						player.inCar = true;
+						player.carPossession = cars[n];
+						player.carNumber = n;
+						player.setView(cars[n].car.rotation.y + Math.PI, player.view.x);					
+						cars[n].playerInCar = true;
 
-					socket.emit('controlling-car', n);
+						socket.emit('controlling-car', n);
+					} else console.log('car already taken!');
+
 					break;
 				}
 			};
@@ -194,6 +199,14 @@ socket.on('update-players', players => {
 			}
 		}
 	} else console.log('loading models');
+});
+
+socket.on('car-controlled-by', data => {
+	cars[data.carNumber].controlledBy = data.user;
+});
+
+socket.on('car-uncontrolled', carNumber => {
+	cars[carNumber].controlledBy = undefined;
 });
 
 socket.on('update-car', car => {
