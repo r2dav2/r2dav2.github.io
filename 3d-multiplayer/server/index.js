@@ -2,7 +2,9 @@ const fs = require('fs');
 
 const options = {
 	key: fs.readFileSync('client-key.pem'),
-	cert: fs.readFileSync('client-cert.pem')
+	cert: fs.readFileSync('client-cert.pem'),
+	requestCert: false,
+	rejectUnauthorized: false
 };
 
 var server = require('https').createServer(options);
